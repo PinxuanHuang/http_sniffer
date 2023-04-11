@@ -9,26 +9,41 @@
 #include <linux/udp.h>
 #include <linux/string.h>
 
+#define IPADDRESS(addr) \
+	((unsigned char *)&addr)[3], \
+	((unsigned char *)&addr)[2], \
+	((unsigned char *)&addr)[1], \
+	((unsigned char *)&addr)[0]
+
 static struct nf_hook_ops *http_sniffer_ops = NULL;
 
-static unsigned int is_ip(){
+static unsigned int is_ipv4(struct ethhdr *ethh){
+    if(ntohs(ethh->h_proto) == ETH_P_IP){
+        return 1;
+    }
+    return 0;
+}
 
+static unsigned int is_tcp(struct iphdr *iph){
+    if(iph->protocol == IPPROTO_TCP){
+        return 1;
+    }
     return 0;
 }
 
 static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct nf_hook_state *state){
-    struct ethhdr *eth_hdr;
-    eth_hdr = (struct ethhdr*)skb_mac_header(skb);
-    // printk(KERN_INFO "This is %x proto", ntohs(eth_hdr->h_proto));
-    // if(ntohs(eth_hdr->h_proto) == ETH_P_IP){
-    //    printk(KERN_INFO "It's an ipv4 addr");
-    // }
-    // else {
-    //     printk(KERN_INFO "I'm not an IPv4 hdr");
-    // }
-    if(ntohs(eth_hdr->h_proto) == ETH_P_IP){
-         unsigned char *net_proto = skb_network_header(skb)+9;
-         printk(KERN_INFO "This is %x\n proto", *net_proto);
+    struct ethhdr *ethh;
+    ethh = eth_hdr(skb);
+    if(is_ipv4(ethh)){
+        struct iphdr *iph;
+        __u32 sip;
+        __u32 dip;
+        iph = ip_hdr(skb);
+        sip = ntohl(iph->saddr);
+        dip = ntohl(iph->daddr);
+        if(is_tcp(iph)){
+            printk(KERN_INFO "saddr:%u.%u.%u.%u daddr:%u.%u.%u.%u is tcp", IPADDRESS(sip), IPADDRESS(dip));
+        }
     }                                        
     return NF_ACCEPT;
 }
