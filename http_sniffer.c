@@ -14,22 +14,38 @@
 
 #include "self_define.h"
 
-const unsigned short HTTP_PORT = 80;
+static unsigned short HTTP_PORT = 80;
+static struct nf_hook_ops *http_sniffer_ops = NULL;
+static struct fm_kv *fm_arr[MAP_SIZE];
 
-int file_open(struct inode *i, struct file *f)
+static int file_open(struct inode *i, struct file *f)
 {
+    // open the character file resource ops
     printk(KERN_INFO "[*] open dev file");
     return 0;
 }
 
-long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
     printk(KERN_INFO "[*] ioctl comm...");
+    switch (cmd)
+    {
+    case GET_FROM_USER:
+        printk(KERN_INFO "[*] Nothing to do with the data pass from user space...");
+        break;
+    case SET_TO_USER:
+        printk(KERN_INFO "[*] Pass sip and dip to user space ft_info...");
+        break;
+    default:
+        printk(KERN_INFO "[*] Default");
+    }
+
     return 0;
 }
 
-int file_close(struct inode *i, struct file *f)
+static int file_close(struct inode *i, struct file *f)
 {
+    // close the character file resource ops
     printk(KERN_INFO "[*] close dev file");
     return 0;
 }
@@ -46,8 +62,6 @@ struct miscdevice my_dev = {
     .fops = &my_fops,
     .mode = 0666,
 };
-
-static struct nf_hook_ops *http_sniffer_ops = NULL;
 
 static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
@@ -100,7 +114,10 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     }
     printk(KERN_INFO "[*] It's http packet");
 
-    return NF_ACCEPT;
+    // TODO design the flow management struct to record packets payload
+    fm_
+
+        return NF_ACCEPT;
 }
 
 /*
@@ -159,8 +176,16 @@ static int __init packet_sniffer_init(void)
         goto DEV_REG_FAIL;
     }
 
+    // assign ioctl data
+    // ft_info = kcalloc(1,  sizeof(struct ft), GFP_KERNEL);
+    // if(ft_info == NULL){
+    //     goto IOCTL_ASSIGN_FAIL;
+    // }
+
     return 0;
 
+// IOCTL_ASSIGN_FAIL:
+//     misc_deregister(&my_dev);
 DEV_REG_FAIL:
     nf_unregister_net_hook(&init_net, http_sniffer_ops);
     kfree(http_sniffer_ops);
@@ -171,8 +196,14 @@ HOOK_REG_FAIL:
 
 static void __exit packet_sniffer_exit(void)
 {
+    // unregister hook
     hook_unreg();
+
+    // unregister device
     misc_deregister(&my_dev);
+
+    // release ioctl data
+    // kfree(ft_info);
 }
 
 module_init(packet_sniffer_init);
