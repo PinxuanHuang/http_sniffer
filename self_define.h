@@ -10,7 +10,7 @@ Try a simple solution.
 // packet data
 struct packet_data
 {
-    unsigned char payload[2048];
+    char payload[512];
     // struct packet_data *next;
 };
 
@@ -28,7 +28,7 @@ struct kv
 {
     unsigned char key[16];
     // struct flow_data *val;
-    struct packet_data val;
+    struct packet_data *val;
     struct kv *next;
 };
 
@@ -41,8 +41,8 @@ struct hmap
 
 // flow management map api interface
 struct hmap *map_init(unsigned int);
-int set_map(struct hmap *, char *, struct packet_data);
-struct packet_data get_map(struct hmap *, char *);
+int set_map(struct hmap *, char *, struct packet_data *);
+struct packet_data *get_map(struct hmap *, char *);
 void del_map(struct hmap *, char *);
 void clean_up(struct hmap *);
 
