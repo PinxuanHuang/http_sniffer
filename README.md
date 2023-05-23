@@ -4,14 +4,6 @@ It is used to sniff the packet to see whether the packet's application layer is 
 
 ## Structure
 
-|--hashmap.c
-|--http_sniffer.c
-|--self_define.h
-|--user_space.c
-|--Makefile
-|--set_iptables.sh
-|--README.md
-
 | file           | desc                                                              |
 | -------------- | ----------------------------------------------------------------- |
 | hashmap.c      | Including implementation of hashmap functions. e.g. set, get, del |
