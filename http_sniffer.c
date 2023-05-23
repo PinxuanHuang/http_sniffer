@@ -16,7 +16,8 @@
 
 static unsigned short HTTP_PORT = 80;
 static struct nf_hook_ops *http_sniffer_ops = NULL;
-static struct fm_kv *fm_arr[MAP_SIZE];
+static struct hmap *map;
+static struct packet_data *pl;
 
 static int file_open(struct inode *i, struct file *f)
 {
@@ -74,6 +75,9 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     __be16 hproto;
     __u8 ipproto;
 
+    // temporary fake data
+    char *key = "gary";
+
     pkt_tail = skb_tail_pointer(skb);
     eth_h = skb_mac_header(skb);
 
@@ -112,12 +116,19 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     {
         return NF_ACCEPT;
     }
-    printk(KERN_INFO "[*] It's http packet");
+
+    // if the packet size greater than 54 bytes, except the packet header
+    printk(KERN_INFO "[*] It's http packet | eth to tail size [%ld]", (pkt_tail - eth_h));
+    if (pkt_tail - eth_h > 54)
+    {
+        memcpy(pl->payload, eth_h, 512);
+        set_map(map, key, pl);
+        printk(KERN_INFO "[*] copy payload data [%ld]", strlen(pl->payload));
+    }
 
     // TODO design the flow management struct to record packets payload
-    fm_
 
-        return NF_ACCEPT;
+    return NF_ACCEPT;
 }
 
 /*
@@ -161,7 +172,7 @@ static void hook_unreg(void)
 static int __init packet_sniffer_init(void)
 {
     int fail = 0;
-
+    printk(KERN_INFO "=== MODULE INIT ===");
     // register hook
     fail = hook_reg();
     if (fail)
@@ -176,6 +187,9 @@ static int __init packet_sniffer_init(void)
         goto DEV_REG_FAIL;
     }
 
+    // initialize hashmap
+    map = map_init(MAP_SIZE);
+    pl = kcalloc(1, sizeof(struct packet_data), GFP_KERNEL);
     // assign ioctl data
     // ft_info = kcalloc(1,  sizeof(struct ft), GFP_KERNEL);
     // if(ft_info == NULL){
@@ -202,8 +216,13 @@ static void __exit packet_sniffer_exit(void)
     // unregister device
     misc_deregister(&my_dev);
 
+    // release hashmap
+    clean_up(map);
+
     // release ioctl data
     // kfree(ft_info);
+    kfree(pl);
+    printk(KERN_INFO "=== MODULE EXIT ===");
 }
 
 module_init(packet_sniffer_init);
