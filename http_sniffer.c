@@ -16,8 +16,8 @@
 
 static unsigned short HTTP_PORT = 80;
 static struct nf_hook_ops *http_sniffer_ops = NULL;
-static struct hmap *map;
-static struct packet_data *pl;
+static struct flow_table *table;
+static unsigned int http_packet_counter = 0;
 
 static int file_open(struct inode *i, struct file *f)
 {
@@ -74,9 +74,8 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     unsigned short tcp_dp;
     __be16 hproto;
     __u8 ipproto;
-
-    // temporary fake data
-    char *key = "gary";
+    struct flow_key key;
+    struct packet_data *pkt_data = NULL;
 
     pkt_tail = skb_tail_pointer(skb);
     eth_h = skb_mac_header(skb);
@@ -121,9 +120,38 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     printk(KERN_INFO "[*] It's http packet | eth to tail size [%ld]", (pkt_tail - eth_h));
     if (pkt_tail - eth_h > 54)
     {
-        memcpy(pl->payload, eth_h, 512);
-        set_map(map, key, pl);
-        printk(KERN_INFO "[*] copy payload data [%ld]", strlen(pl->payload));
+        /*
+        specific the flow
+        set larger port and ip to sip and sport
+        set lower port and ip to dip and dport
+        finally, set proto
+        */
+        if (tcp_sp > tcp_dp)
+        {
+            memcpy(&(key.sip), ipv4_h + 12, 4);
+            memcpy(&(key.sport), &tcp_sp, 2);
+            memcpy(&(key.dip), ipv4_h + 16, 4);
+            memcpy(&(key.dport), &tcp_dp, 2);
+        }
+        else
+        {
+            memcpy(&(key.sip), ipv4_h + 16, 4);
+            memcpy(&(key.sport), &tcp_dp, 2);
+            memcpy(&(key.dip), ipv4_h + 12, 4);
+            memcpy(&(key.dport), &tcp_sp, 2);
+        }
+        memcpy(&(key.proto), ipv4_h + 9, 1);
+
+        /* Initialize the packet data structure and assign the payload data */
+        pkt_data = kcalloc(1, sizeof(struct packet_data), GFP_KERNEL);
+        memcpy(pkt_data->payload, eth_h, (pkt_tail - eth_h));
+        pkt_data->payload_len = pkt_tail - eth_h;
+        pkt_data->pkt_next = NULL;
+
+        /* set the packet data to the flow */
+        flow_data_add_packet(table, key, pkt_data);
+        http_packet_counter += 1;
+        printk(KERN_INFO "[*] copy payload data");
     }
 
     // TODO design the flow management struct to record packets payload
@@ -187,9 +215,8 @@ static int __init packet_sniffer_init(void)
         goto DEV_REG_FAIL;
     }
 
-    // initialize hashmap
-    map = map_init(MAP_SIZE);
-    pl = kcalloc(1, sizeof(struct packet_data), GFP_KERNEL);
+    // initialize flow_table
+    table = flow_table_init(MAP_SIZE);
     // assign ioctl data
     // ft_info = kcalloc(1,  sizeof(struct ft), GFP_KERNEL);
     // if(ft_info == NULL){
@@ -216,12 +243,11 @@ static void __exit packet_sniffer_exit(void)
     // unregister device
     misc_deregister(&my_dev);
 
-    // release hashmap
-    clean_up(map);
+    // release flow_table
+    flow_table_clean_up(table);
 
     // release ioctl data
     // kfree(ft_info);
-    kfree(pl);
     printk(KERN_INFO "=== MODULE EXIT ===");
 }
 

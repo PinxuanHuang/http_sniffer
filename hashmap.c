@@ -32,150 +32,200 @@ void my_free(void *ptr)
     free(ptr);
 #endif
 }
-
-/*
-Initialize the hmap
-*/
-struct hmap *map_init(unsigned int size)
+/* init the flow table*/
+struct flow_table *flow_table_init(unsigned int size)
 {
-    // [struct ft_kv *, ..., ...]
-    struct hmap *map = my_malloc(sizeof(struct hmap));
-    map->size = size;
-    map->map = my_malloc(sizeof(struct kv *) * size);
-    memset(map->map, 0, sizeof(struct kv *) * size);
-    return map;
+    struct flow_table *flow_table = my_malloc(sizeof(struct flow_table));
+    flow_table->size = size;
+    flow_table->buckets = my_malloc(sizeof(struct flow_entry *) * size);
+    memset(flow_table->buckets, 0, sizeof(struct flow_entry *) * size);
+    return flow_table;
 }
 
-/*
-set a key:val in the hmap
-*/
-int set_map(struct hmap *map, char *key, struct packet_data *val)
+/* get the specific bucket where the key should be resided */
+struct flow_entry *flow_table_get_bucket(struct flow_table *table, struct flow_key key)
 {
-    int exist = 0;
-    int key_l = strlen(key);
-    struct kv *flow_key = map->map[key_l % MAP_SIZE];
-    struct kv *head = flow_key;
+    struct flow_entry *bucket;
+    bucket = table->buckets[(key.sport + key.dport) % (table->size)];
+    return bucket;
+}
 
-    // if the bucket doesn't have any flow
-    if (flow_key == NULL)
+/* check whether the flow has already existed or not */
+struct flow_entry *flow_table_flow_exist(struct flow_entry *bucket, struct flow_key key)
+{
+    while (bucket)
     {
-        struct kv *new_flow = my_malloc(sizeof(struct kv));
-        strncpy(new_flow->key, key, 15);
-        new_flow->key[15] = '\0';
-        new_flow->val = val;
-        new_flow->next = NULL;
-        map->map[key_l % MAP_SIZE] = new_flow;
-        return 0;
-    }
-    // check whether the key has already exised or not
-    while (flow_key)
-    {
-        if (strcmp(flow_key->key, key) == 0)
+        if (memcmp(&(bucket->five_tuple_key), &key, sizeof(struct flow_key)) == 0)
         {
-            exist = 1;
-            break;
+            // printf("%s is already existed\n", key.sip);
+            return bucket;
         }
-        flow_key = flow_key->next;
+        bucket = bucket->flow_next;
     }
-    // if so, update it's value
-    if (exist)
+    return NULL;
+}
+
+/* add a flow to flow table */
+// int flow_table_add_flow(struct flow_entry *bucket, struct flow_key key)
+int flow_table_add_flow(struct flow_table *table, struct flow_key key)
+{
+    // struct flow_entry **indirect;
+    struct flow_entry *bucket;
+    struct flow_entry *new_flow;
+
+    /* get the bucket */
+    // indirect = &bucket;
+    bucket = flow_table_get_bucket(table, key);
+
+    /* init a new flow */
+    new_flow = my_malloc(sizeof(struct flow_entry));
+    new_flow->five_tuple_key = key;
+    new_flow->flow_info.packet_info = NULL;
+    new_flow->flow_next = NULL;
+
+    if (!bucket)
     {
-        flow_key->val = val;
+        table->buckets[(key.sport + key.dport) % (table->size)] = new_flow;
+        // printf("[No bucket in %d] Succ to add flow sip : %s\n", (key.sport + key.dport) % (table->size), key.sip);
     }
-    // else set a new kv and update the bucket head
     else
     {
-        struct kv *new_flow = my_malloc(sizeof(struct kv));
-        strncpy(new_flow->key, key, 15);
-        new_flow->key[15] = '\0';
-        new_flow->val = val;
-        new_flow->next = head;
-        map->map[key_l % MAP_SIZE] = new_flow;
+        while (bucket)
+        {
+            if (!(bucket->flow_next))
+            {
+                bucket->flow_next = new_flow;
+                // printf("[bucket in %d] Succ to add flow sip : %s\n", (key.sport + key.dport) % (table->size), key.sip);
+                break;
+            }
+            bucket = bucket->flow_next;
+        }
+    }
+    // while (*indirect)
+    // {
+    //     indirect = &(*indirect)->flow_next;
+    // }
+    // *indirect = new_flow;
+    return 0;
+}
+
+/* get the specific flow's data */
+struct flow_data *flow_table_get_flow(struct flow_table *table, struct flow_key key)
+{
+    struct flow_entry *bucket, *current_flow;
+    struct flow_data *data = NULL;
+
+    bucket = flow_table_get_bucket(table, key);
+    current_flow = flow_table_flow_exist(bucket, key);
+    if (current_flow)
+    {
+        data = &(current_flow->flow_info);
+    }
+    return data;
+}
+
+/* TODO */
+/* delete the specific flow from the flow table */
+void flow_table_del_flow(struct flow_table *table, struct flow_key key)
+{
+    return;
+}
+
+/* add a packet to the specific flow */
+int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct packet_data *pkt)
+{
+    struct flow_entry *bucket;
+    struct flow_entry *current_flow;
+    struct flow_data *current_flow_data;
+    struct packet_data *pkt_data;
+
+    /* get the specific bucket and check whether the flow exist or not */
+    bucket = flow_table_get_bucket(table, key);
+    current_flow = flow_table_flow_exist(bucket, key);
+
+    /* if the flow not exist, add it to the flow table */
+    if (!current_flow)
+    {
+        flow_table_add_flow(table, key);
+    }
+
+    /* get the specific flow data */
+    current_flow_data = flow_table_get_flow(table, key);
+    pkt_data = current_flow_data->packet_info;
+
+    /* if there's no any packet in the flow data*/
+    if (!pkt_data)
+    {
+        current_flow_data->packet_info = pkt;
+        return 0;
+    }
+
+    /* append the packet to the tail, meaning it's latest */
+    while (pkt_data)
+    {
+        if (!(pkt_data->pkt_next))
+        {
+            pkt_data->pkt_next = pkt;
+            break;
+        }
     }
     return 0;
 }
 
-/*
-Get a value of the specific key
-*/
-struct packet_data *get_map(struct hmap *map, char *key)
+/* TODO */
+/* del all packets of a flow */
+void flow_data_del_packets(struct flow_table *table, struct flow_key key)
 {
-    int key_l = strlen(key);
-    struct kv *flow_key = map->map[key_l % MAP_SIZE];
-    struct packet_data *val;
-
-    // if the bucket doesn't have any flow
-    while (flow_key)
-    {
-        if (strcmp(flow_key->key, key) == 0)
-        {
-            val = flow_key->val;
-            break;
-        }
-        flow_key = flow_key->next;
-    }
-
-    return val;
-}
-
-/*
-Delete a key from hmap
-*/
-void del_map(struct hmap *map, char *key)
-{
-    int key_l = strlen(key);
-    struct kv **indirect = &map->map[key_l % MAP_SIZE];
-    struct kv *node;
-    while (*indirect)
-    {
-        if (strcmp((*indirect)->key, key) == 0)
-        {
-            // printf("del %s val: %s\n", (*indirect)->key, (*indirect)->val.payload);
-            printk(KERN_INFO "del %s val: %s\n", (*indirect)->key, (*indirect)->val->payload);
-            node = *indirect;
-            *indirect = node->next;
-            my_free(node);
-            break;
-        }
-        indirect = &(*indirect)->next;
-    }
     return;
 }
 
-/*
-Clean up the hmap
-*/
-void clean_up(struct hmap *map)
+/* Clean up the flow_table */
+void flow_table_clean_up(struct flow_table *table)
 {
     int i;
-    struct kv **indirect;
-    struct kv *node;
+    unsigned int packet_clean_up_counter = 0;
+    struct flow_entry *bucket_head;
+    struct flow_data flow_head;
+    struct packet_data *pkt;
 
-    for (i = 0; i < MAP_SIZE; i++)
+    for (i = 0; i < table->size; i++)
     {
-        indirect = &map->map[i];
-        while (*indirect)
+        while (table->buckets[i])
         {
-            // printf("clean up %s val: %s\n", (*indirect)->key, (*indirect)->val.payload);
-            printk(KERN_INFO "clean up %s val: %s\n", (*indirect)->key, (*indirect)->val->payload);
-            node = *indirect;
-            *indirect = node->next;
-            my_free(node);
+            bucket_head = table->buckets[i];
+            flow_head = bucket_head->flow_info;
+            while (flow_head.packet_info)
+            {
+                pkt = flow_head.packet_info;
+                flow_head.packet_info = pkt->pkt_next;
+                // printf("clean up key : %s | data: %s\n", bucket_head->five_tuple_key.sip, pkt->payload);
+                my_free(pkt);
+                packet_clean_up_counter += 1;
+            }
+            table->buckets[i] = bucket_head->flow_next;
+            // printf("clean up key : %s\n", bucket_head->five_tuple_key.sip);
+            printk(KERN_INFO "clean up key : (sip:sport) %s:%d | (dip:dport) %s:%d\n", bucket_head->five_tuple_key.sip, bucket_head->five_tuple_key.sport, bucket_head->five_tuple_key.dip, bucket_head->five_tuple_key.dport);
+            my_free(bucket_head);
         }
     }
-    my_free(map->map);
-    my_free(map);
+    printk(KERN_INFO "Total clean up %d packets\n", packet_clean_up_counter);
+    // printf("clean up buckets\n");
+    my_free(table->buckets);
+    // printf("clean up table\n");
+    my_free(table);
     return;
 }
 
-/*
-Export these function
-*/
-EXPORT_SYMBOL(map_init);
-EXPORT_SYMBOL(set_map);
-EXPORT_SYMBOL(get_map);
-EXPORT_SYMBOL(del_map);
-EXPORT_SYMBOL(clean_up);
+/* Export these function */
+EXPORT_SYMBOL(flow_table_init);
+EXPORT_SYMBOL(flow_table_get_bucket);
+EXPORT_SYMBOL(flow_table_flow_exist);
+EXPORT_SYMBOL(flow_table_add_flow);
+EXPORT_SYMBOL(flow_table_get_flow);
+EXPORT_SYMBOL(flow_table_del_flow);
+EXPORT_SYMBOL(flow_data_add_packet);
+EXPORT_SYMBOL(flow_data_del_packets);
+EXPORT_SYMBOL(flow_table_clean_up);
 
 static int __init hashmap_init(void)
 {
