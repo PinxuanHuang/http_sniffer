@@ -17,7 +17,6 @@
 static unsigned short HTTP_PORT = 80;
 static struct nf_hook_ops *http_sniffer_ops = NULL;
 static struct flow_table *table;
-static unsigned int http_packet_counter = 0;
 
 static int file_open(struct inode *i, struct file *f)
 {
@@ -28,6 +27,18 @@ static int file_open(struct inode *i, struct file *f)
 
 static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
+    int i;
+    struct packet_data *pkt_data = NULL;
+    /* get the first packet from the buckets */
+    for (i = 0; i < table->size; i++)
+    {
+        if (table->buckets[i])
+        {
+            pkt_data = table->buckets[i]->flow_info.packet_info;
+            break;
+        }
+    }
+
     printk(KERN_INFO "[*] ioctl comm...");
     switch (cmd)
     {
@@ -36,6 +47,11 @@ static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
         break;
     case SET_TO_USER:
         printk(KERN_INFO "[*] Pass sip and dip to user space ft_info...");
+        // if (pkt_data)
+        // {
+        //     copy_to_user((struct packet_data *)arg, pkt_data, sizeof(struct packet_data));
+        //     printk(KERN_INFO "copy to user~~~");
+        // }
         break;
     default:
         printk(KERN_INFO "[*] Default");
@@ -74,7 +90,7 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     unsigned short tcp_dp;
     __be16 hproto;
     __u8 ipproto;
-    struct flow_key key;
+    struct flow_key key = {0};
     struct packet_data *pkt_data = NULL;
 
     pkt_tail = skb_tail_pointer(skb);
@@ -143,15 +159,25 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
         memcpy(&(key.proto), ipv4_h + 9, 1);
 
         /* Initialize the packet data structure and assign the payload data */
-        pkt_data = kcalloc(1, sizeof(struct packet_data), GFP_KERNEL);
+        // pkt_data = kcalloc(1, sizeof(struct packet_data), GFP_ATOMIC);
+        pkt_data = my_malloc(sizeof(struct packet_data));
         memcpy(pkt_data->payload, eth_h, (pkt_tail - eth_h));
         pkt_data->payload_len = pkt_tail - eth_h;
         pkt_data->pkt_next = NULL;
 
         /* set the packet data to the flow */
         flow_data_add_packet(table, key, pkt_data);
-        http_packet_counter += 1;
-        printk(KERN_INFO "[*] copy payload data");
+        printk(KERN_INFO "[sniff] flow : (sip:sport) %u.%u.%u.%u:%u | (dip:dport) %u.%u.%u.%u:%u\n",
+               key.sip[0],
+               key.sip[1],
+               key.sip[2],
+               key.sip[3],
+               key.sport,
+               key.dip[0],
+               key.dip[1],
+               key.dip[2],
+               key.dip[3],
+               key.dport);
     }
 
     // TODO design the flow management struct to record packets payload
