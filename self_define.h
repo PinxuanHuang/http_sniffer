@@ -1,3 +1,4 @@
+#include <stddef.h>
 #ifndef _SELF_DEFINE_H_
 #define _SELF_DEFINE_H_
 
@@ -65,6 +66,8 @@ struct flow_table
     struct flow_entry **buckets; /* pointers to key-value pair pointer */
 };
 
+void *my_malloc(size_t);
+
 /* Following is the flow management api interface definition */
 struct flow_table *flow_table_init(unsigned int); /* init a flow table */
 struct flow_entry *flow_table_get_bucket(struct flow_table *, struct flow_key);
@@ -73,8 +76,8 @@ int flow_table_add_flow(struct flow_table *, struct flow_key);               /* 
 struct flow_data *flow_table_get_flow(struct flow_table *, struct flow_key); /* get a flow's data from the flow table */
 void flow_table_del_flow(struct flow_table *, struct flow_key);              /* delete a flow from the flow table */
 
-int flow_data_add_packet(struct flow_table *, struct flow_key key, struct packet_data *); /* add a packet to the flow */
-void flow_data_del_packets(struct flow_table *, struct flow_key);                         /* del all packets of the flow */
+int flow_data_add_packet(struct flow_table *, struct flow_key, struct packet_data *); /* add a packet to the flow */
+void flow_data_del_packets(struct flow_table *, struct flow_key);                     /* del all packets of the flow */
 
 void flow_table_clean_up(struct flow_table *); /* clean up all flows and packets from the flow table */
 
