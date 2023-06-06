@@ -11,16 +11,18 @@
 #include <string.h>
 #endif
 
+static int mem_counter = 0;
+
 void *my_malloc(size_t size)
 {
     void *result;
 
 #ifdef __KERNEL__
-    result = kmalloc(size, GFP_KERNEL); // GFP_KERNEL, GFP_ATOMIC
+    result = kmalloc(size, GFP_ATOMIC); // GFP_KERNEL, GFP_ATOMIC
 #else                                   /* user space */
     result = malloc(size);
 #endif
-
+    mem_counter += 1;
     return result;
 }
 
@@ -31,6 +33,7 @@ void my_free(void *ptr)
 #else /* user space */
     free(ptr);
 #endif
+    mem_counter -= 1;
 }
 /* init the flow table*/
 struct flow_table *flow_table_init(unsigned int size)
@@ -66,15 +69,12 @@ struct flow_entry *flow_table_flow_exist(struct flow_entry *bucket, struct flow_
 }
 
 /* add a flow to flow table */
-// int flow_table_add_flow(struct flow_entry *bucket, struct flow_key key)
 int flow_table_add_flow(struct flow_table *table, struct flow_key key)
 {
-    // struct flow_entry **indirect;
     struct flow_entry *bucket;
     struct flow_entry *new_flow;
 
     /* get the bucket */
-    // indirect = &bucket;
     bucket = flow_table_get_bucket(table, key);
 
     /* init a new flow */
@@ -101,11 +101,6 @@ int flow_table_add_flow(struct flow_table *table, struct flow_key key)
             bucket = bucket->flow_next;
         }
     }
-    // while (*indirect)
-    // {
-    //     indirect = &(*indirect)->flow_next;
-    // }
-    // *indirect = new_flow;
     return 0;
 }
 
@@ -138,7 +133,11 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     struct flow_entry *current_flow;
     struct flow_data *current_flow_data;
     struct packet_data *pkt_data;
-
+    // if(!sequential_lock)
+    // {
+    //     printk(KERN_INFO "");
+    // }
+    printk(KERN_INFO "Start add a packet");
     /* get the specific bucket and check whether the flow exist or not */
     bucket = flow_table_get_bucket(table, key);
     current_flow = flow_table_flow_exist(bucket, key);
@@ -157,6 +156,7 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     if (!pkt_data)
     {
         current_flow_data->packet_info = pkt;
+        printk(KERN_INFO "[Init] End add a packet");
         return 0;
     }
 
@@ -168,7 +168,9 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
             pkt_data->pkt_next = pkt;
             break;
         }
+        pkt_data = pkt_data->pkt_next;
     }
+    printk(KERN_INFO "[Append] End add a packet");
     return 0;
 }
 
@@ -188,6 +190,7 @@ void flow_table_clean_up(struct flow_table *table)
     struct flow_data flow_head;
     struct packet_data *pkt;
 
+    printk(KERN_INFO "mem : %d", mem_counter);
     for (i = 0; i < table->size; i++)
     {
         while (table->buckets[i])
@@ -204,7 +207,17 @@ void flow_table_clean_up(struct flow_table *table)
             }
             table->buckets[i] = bucket_head->flow_next;
             // printf("clean up key : %s\n", bucket_head->five_tuple_key.sip);
-            printk(KERN_INFO "clean up key : (sip:sport) %s:%d | (dip:dport) %s:%d\n", bucket_head->five_tuple_key.sip, bucket_head->five_tuple_key.sport, bucket_head->five_tuple_key.dip, bucket_head->five_tuple_key.dport);
+            printk(KERN_INFO "clean up key : (sip:sport) %u.%u.%u.%u:%u | (dip:dport) %u.%u.%u.%u:%u\n",
+                   bucket_head->five_tuple_key.sip[0],
+                   bucket_head->five_tuple_key.sip[1],
+                   bucket_head->five_tuple_key.sip[2],
+                   bucket_head->five_tuple_key.sip[3],
+                   bucket_head->five_tuple_key.sport,
+                   bucket_head->five_tuple_key.dip[0],
+                   bucket_head->five_tuple_key.dip[1],
+                   bucket_head->five_tuple_key.dip[2],
+                   bucket_head->five_tuple_key.dip[3],
+                   bucket_head->five_tuple_key.dport);
             my_free(bucket_head);
         }
     }
@@ -213,6 +226,7 @@ void flow_table_clean_up(struct flow_table *table)
     my_free(table->buckets);
     // printf("clean up table\n");
     my_free(table);
+    printk(KERN_INFO "mem : %d", mem_counter);
     return;
 }
 
@@ -227,19 +241,19 @@ EXPORT_SYMBOL(flow_data_add_packet);
 EXPORT_SYMBOL(flow_data_del_packets);
 EXPORT_SYMBOL(flow_table_clean_up);
 
-static int __init hashmap_init(void)
-{
-    printk(KERN_INFO "[*] INIT HASHMAP MODULE");
-    return 0;
-}
+// static int __init hashmap_init(void)
+// {
+//     printk(KERN_INFO "[*] INIT HASHMAP MODULE");
+//     return 0;
+// }
 
-static void __exit hashmap_exit(void)
-{
-    printk(KERN_INFO "[*] EXIT HASHMAP MODULE");
-    return;
-}
+// static void __exit hashmap_exit(void)
+// {
+//     printk(KERN_INFO "[*] EXIT HASHMAP MODULE");
+//     return;
+// }
 
-module_init(hashmap_init);
-module_exit(hashmap_exit);
+// module_init(hashmap_init);
+// module_exit(hashmap_exit);
 
 MODULE_LICENSE("GPL");
