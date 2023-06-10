@@ -28,13 +28,17 @@ static int file_open(struct inode *i, struct file *f)
 static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
     int i;
+    unsigned int res;
+    struct flow_entry *flow = NULL;
     struct packet_data *pkt_data = NULL;
+
     /* get the first packet from the buckets */
     for (i = 0; i < table->size; i++)
     {
-        if (table->buckets[i])
+        flow = table->buckets[i];
+        if (flow)
         {
-            pkt_data = table->buckets[i]->flow_info.packet_info;
+            pkt_data = flow->flow_info.packet_info;
             break;
         }
     }
@@ -47,11 +51,19 @@ static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
         break;
     case SET_TO_USER:
         printk(KERN_INFO "[*] Pass sip and dip to user space ft_info...");
-        // if (pkt_data)
-        // {
-        //     copy_to_user((struct packet_data *)arg, pkt_data, sizeof(struct packet_data));
-        //     printk(KERN_INFO "copy to user~~~");
-        // }
+        if (pkt_data)
+        {
+            res = copy_to_user((struct packet_data *)arg, pkt_data, sizeof(struct packet_data));
+            if (res)
+            {
+                printk(KERN_ERR "Err when copy to user!!!");
+            }
+            printk(KERN_INFO "copy to user~~~");
+        }
+        else
+        {
+            printk(KERN_INFO "There's no any data need to copy to user~~~");
+        }
         break;
     default:
         printk(KERN_INFO "[*] Default");

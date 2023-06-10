@@ -123,6 +123,47 @@ struct flow_data *flow_table_get_flow(struct flow_table *table, struct flow_key 
 /* delete the specific flow from the flow table */
 void flow_table_del_flow(struct flow_table *table, struct flow_key key)
 {
+    struct flow_entry *bucket;
+    struct flow_entry *current_flow;
+    struct packet_data *pkt_head;
+
+    /* get the specific bucket and check whether the flow exist or not */
+    bucket = flow_table_get_bucket(table, key);
+    current_flow = flow_table_flow_exist(bucket, key);
+
+    /* if the flow does not exist*/
+    if (!current_flow)
+    {
+        return;
+    }
+
+    /* if the flow exist, delete all its packets then delete the flow */
+    pkt_head = current_flow->flow_info.packet_info;
+    while (pkt_head)
+    {
+        current_flow->flow_info.packet_info = pkt_head->pkt_next;
+        my_free(pkt_head);
+        pkt_head = current_flow->flow_info.packet_info;
+    }
+
+    /* if the bucket head is the indicated flow*/
+    if (bucket == current_flow)
+    {
+        table->buckets[(key.sport + key.dport) % (table->size)] = bucket->flow_next;
+        my_free(current_flow);
+        return;
+    }
+
+    while (bucket)
+    {
+        if (bucket->flow_next == current_flow)
+        {
+            break;
+        }
+        bucket = bucket->flow_next;
+    }
+    bucket->flow_next = current_flow->flow_next;
+    my_free(current_flow);
     return;
 }
 
@@ -133,10 +174,7 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     struct flow_entry *current_flow;
     struct flow_data *current_flow_data;
     struct packet_data *pkt_data;
-    // if(!sequential_lock)
-    // {
-    //     printk(KERN_INFO "");
-    // }
+
     printk(KERN_INFO "Start add a packet");
     /* get the specific bucket and check whether the flow exist or not */
     bucket = flow_table_get_bucket(table, key);
@@ -174,10 +212,30 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     return 0;
 }
 
-/* TODO */
 /* del all packets of a flow */
-void flow_data_del_packets(struct flow_table *table, struct flow_key key)
+void flow_data_del_packet(struct flow_table *table, struct flow_key key)
 {
+    struct flow_entry *bucket;
+    struct flow_entry *current_flow;
+    struct packet_data *pkt_head;
+
+    /* get the specific bucket and check whether the flow exist or not */
+    bucket = flow_table_get_bucket(table, key);
+    current_flow = flow_table_flow_exist(bucket, key);
+
+    /* if the flow does not exist*/
+    if (!current_flow)
+    {
+        return;
+    }
+
+    /* if the flow has packets, remove the first one */
+    pkt_head = current_flow->flow_info.packet_info;
+    if (pkt_head)
+    {
+        current_flow->flow_info.packet_info = pkt_head->pkt_next;
+        my_free(pkt_head);
+    }
     return;
 }
 
@@ -229,31 +287,5 @@ void flow_table_clean_up(struct flow_table *table)
     printk(KERN_INFO "mem : %d", mem_counter);
     return;
 }
-
-/* Export these function */
-EXPORT_SYMBOL(flow_table_init);
-EXPORT_SYMBOL(flow_table_get_bucket);
-EXPORT_SYMBOL(flow_table_flow_exist);
-EXPORT_SYMBOL(flow_table_add_flow);
-EXPORT_SYMBOL(flow_table_get_flow);
-EXPORT_SYMBOL(flow_table_del_flow);
-EXPORT_SYMBOL(flow_data_add_packet);
-EXPORT_SYMBOL(flow_data_del_packets);
-EXPORT_SYMBOL(flow_table_clean_up);
-
-// static int __init hashmap_init(void)
-// {
-//     printk(KERN_INFO "[*] INIT HASHMAP MODULE");
-//     return 0;
-// }
-
-// static void __exit hashmap_exit(void)
-// {
-//     printk(KERN_INFO "[*] EXIT HASHMAP MODULE");
-//     return;
-// }
-
-// module_init(hashmap_init);
-// module_exit(hashmap_exit);
 
 MODULE_LICENSE("GPL");

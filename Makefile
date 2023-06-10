@@ -1,15 +1,8 @@
-obj-m += http_sniffer.o 
-obj-m += hashmap.o
-# MODULE_NAME = http_sniffer
-# obj-m := $(MODULE_NAME).o
-# $(MODULE_NAME)-objs := hashmap.o
+MODULE_NAME := my_http_sniffer
 
-# all: map_test kernel_module user_space
+obj-m := $(MODULE_NAME).o
+$(MODULE_NAME)-objs := http_sniffer.o hashmap.o
 
-# map_test: self_define.h map_func.c map_test.c
-# 	gcc map_func.c -c
-# 	gcc map_test.c -c
-# 	gcc map_func.o map_test.o -o map_test
 map_func: map_func.c self_define.h
 	gcc map_func.c -o map_func
 user_space: user_space.c self_define.h

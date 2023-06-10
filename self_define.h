@@ -8,13 +8,13 @@
 /* pcap file global header structure */
 typedef struct pcap_hdr_s
 {
-    unsigned int magic_number;  /* magic number */
-    unsigned int version_major; /* major version number */
-    unsigned int version_minor; /* minor version number */
-    int thiszone;               /* GMT to local correction */
-    unsigned int sigfigs;       /* accuracy of timestamps */
-    unsigned int snaplen;       /* max length of captured packets, in octets */
-    unsigned int network;       /* data link type */
+    unsigned int magic_number;    /* magic number */
+    unsigned short version_major; /* major version number */
+    unsigned short version_minor; /* minor version number */
+    int thiszone;                 /* GMT to local correction */
+    unsigned int sigfigs;         /* accuracy of timestamps */
+    unsigned int snaplen;         /* max length of captured packets, in octets */
+    unsigned int network;         /* data link type */
 } pcap_hdr_t;
 
 /* pcap file packet header structure */
@@ -77,7 +77,7 @@ struct flow_data *flow_table_get_flow(struct flow_table *, struct flow_key); /* 
 void flow_table_del_flow(struct flow_table *, struct flow_key);              /* delete a flow from the flow table */
 
 int flow_data_add_packet(struct flow_table *, struct flow_key, struct packet_data *); /* add a packet to the flow */
-void flow_data_del_packets(struct flow_table *, struct flow_key);                     /* del all packets of the flow */
+void flow_data_del_packet(struct flow_table *, struct flow_key);                      /* del all packets of the flow */
 
 void flow_table_clean_up(struct flow_table *); /* clean up all flows and packets from the flow table */
 
