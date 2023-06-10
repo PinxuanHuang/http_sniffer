@@ -119,7 +119,6 @@ struct flow_data *flow_table_get_flow(struct flow_table *table, struct flow_key 
     return data;
 }
 
-/* TODO */
 /* delete the specific flow from the flow table */
 void flow_table_del_flow(struct flow_table *table, struct flow_key key)
 {
@@ -175,7 +174,7 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     struct flow_data *current_flow_data;
     struct packet_data *pkt_data;
 
-    printk(KERN_INFO "Start add a packet");
+    // printk(KERN_INFO "Start add a packet");
     /* get the specific bucket and check whether the flow exist or not */
     bucket = flow_table_get_bucket(table, key);
     current_flow = flow_table_flow_exist(bucket, key);
@@ -194,7 +193,7 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     if (!pkt_data)
     {
         current_flow_data->packet_info = pkt;
-        printk(KERN_INFO "[Init] End add a packet");
+        // printk(KERN_INFO "[Init] End add a packet");
         return 0;
     }
 
@@ -203,12 +202,13 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     {
         if (!(pkt_data->pkt_next))
         {
-            pkt_data->pkt_next = pkt;
             break;
         }
         pkt_data = pkt_data->pkt_next;
     }
-    printk(KERN_INFO "[Append] End add a packet");
+    pkt_data->pkt_next = pkt;
+    // printk(KERN_INFO "[Append] End add a packet");
+    printk(KERN_INFO "[Add a packet] final 5 bytes of the packet %u %u %u %u %u", pkt->payload[pkt->payload_len - 5], pkt->payload[pkt->payload_len - 4], pkt->payload[pkt->payload_len - 3], pkt->payload[pkt->payload_len - 2], pkt->payload[pkt->payload_len - 1]);
     return 0;
 }
 

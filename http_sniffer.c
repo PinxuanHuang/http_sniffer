@@ -36,21 +36,32 @@ static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
     for (i = 0; i < table->size; i++)
     {
         flow = table->buckets[i];
-        if (flow)
+        while (flow)
         {
             pkt_data = flow->flow_info.packet_info;
-            break;
+            if (pkt_data)
+            {
+                printk(KERN_INFO "[IOCTL] final 5 bytes of the packet %u %u %u %u %u", pkt_data->payload[pkt_data->payload_len - 5], pkt_data->payload[pkt_data->payload_len - 4], pkt_data->payload[pkt_data->payload_len - 3], pkt_data->payload[pkt_data->payload_len - 2], pkt_data->payload[pkt_data->payload_len - 1]);
+                break;
+            }
+            else
+            {
+                flow_table_del_flow(table, flow->five_tuple_key);
+                flow = table->buckets[i];
+            }
         }
+        if (pkt_data)
+            break;
     }
 
-    printk(KERN_INFO "[*] ioctl comm...");
+    // printk(KERN_INFO "[*] ioctl comm...");
     switch (cmd)
     {
     case GET_FROM_USER:
         printk(KERN_INFO "[*] Nothing to do with the data pass from user space...");
         break;
     case SET_TO_USER:
-        printk(KERN_INFO "[*] Pass sip and dip to user space ft_info...");
+        // printk(KERN_INFO "[*] Pass sip and dip to user space ft_info...");
         if (pkt_data)
         {
             res = copy_to_user((struct packet_data *)arg, pkt_data, sizeof(struct packet_data));
@@ -58,12 +69,13 @@ static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
             {
                 printk(KERN_ERR "Err when copy to user!!!");
             }
-            printk(KERN_INFO "copy to user~~~");
+            flow_data_del_packet(table, flow->five_tuple_key);
+            // printk(KERN_INFO "copy to user~~~");
         }
-        else
-        {
-            printk(KERN_INFO "There's no any data need to copy to user~~~");
-        }
+        // else
+        // {
+        //     printk(KERN_INFO "There's no any data need to copy to user~~~");
+        // }
         break;
     default:
         printk(KERN_INFO "[*] Default");
@@ -255,16 +267,9 @@ static int __init packet_sniffer_init(void)
 
     // initialize flow_table
     table = flow_table_init(MAP_SIZE);
-    // assign ioctl data
-    // ft_info = kcalloc(1,  sizeof(struct ft), GFP_KERNEL);
-    // if(ft_info == NULL){
-    //     goto IOCTL_ASSIGN_FAIL;
-    // }
 
     return 0;
 
-// IOCTL_ASSIGN_FAIL:
-//     misc_deregister(&my_dev);
 DEV_REG_FAIL:
     nf_unregister_net_hook(&init_net, http_sniffer_ops);
     kfree(http_sniffer_ops);
@@ -284,8 +289,6 @@ static void __exit packet_sniffer_exit(void)
     // release flow_table
     flow_table_clean_up(table);
 
-    // release ioctl data
-    // kfree(ft_info);
     printk(KERN_INFO "=== MODULE EXIT ===");
 }
 

@@ -22,21 +22,21 @@ FILE *write_pcap_file(char *file_name)
     FILE *pcap_file = NULL;
     pcap_hdr_t pcaph =
         {
-            .magic_number = 0xd4c3b2a1,
-            .version_major = 4,
-            .version_minor = 2,
+            .magic_number = 0xa1b2c3d4,
+            .version_major = 2,
+            .version_minor = 4,
             .thiszone = 0,
             .sigfigs = 0,
             .snaplen = 65535,
             .network = 1,
         };
-    printf("step1\n");
+    // printf("step1\n");
     pcap_file = fopen(file_name, "w");
     if (pcap_file == NULL)
     {
         return NULL;
     }
-    printf("step2\n");
+    // printf("step2\n");
     res = fwrite((char *)&pcaph, sizeof(pcap_hdr_t), 1, pcap_file);
     /* Error in writing file */
     if (res != 1)
@@ -44,13 +44,14 @@ FILE *write_pcap_file(char *file_name)
         fclose(pcap_file);
         return NULL;
     }
-    printf("step3\n");
+    // printf("step3\n");
     fflush(pcap_file);
     return pcap_file;
 }
 
 int main()
 {
+    signal(SIGINT, handler);
     int res = 0;
     int packet_counter = 0;
     pcaprec_hdr_t pcaprec_hdr;
@@ -69,31 +70,40 @@ int main()
     TODO
     create the pcap file
     */
-    if (ioctl(my_dev, SET_TO_USER, &pkt_data) == 0)
-    {
-        pcaprec_hdr = (pcaprec_hdr_t){
-            .ts_sec = 1686143029,
-            .ts_usec = 100,
-            .incl_len = pkt_data.payload_len,
-            .orig_len = pkt_data.payload_len,
-        };
-        printf("packet data length : %d\n", pkt_data.payload_len);
-    }
     pcap_file = write_pcap_file(file_name);
     printf("Success to open file my_pcap.pcap\n");
 
-    res = fwrite((char *)&pcaprec_hdr, sizeof(pcaprec_hdr_t), 1, pcap_file);
-    if (res != 1)
+    while (keep_running)
     {
-        goto IO_FAIL;
+        if (ioctl(my_dev, SET_TO_USER, &pkt_data) == 0)
+        {
+            if (pkt_data.payload_len != 0)
+            {
+                pcaprec_hdr = (pcaprec_hdr_t){
+                    .ts_sec = 1686143029,
+                    .ts_usec = 100,
+                    .incl_len = pkt_data.payload_len,
+                    .orig_len = pkt_data.payload_len,
+                };
+                printf("packet data length : %d\n", pkt_data.payload_len);
+                res = fwrite((char *)&pcaprec_hdr, sizeof(pcaprec_hdr_t), 1, pcap_file);
+                if (res != 1)
+                {
+                    goto IO_FAIL;
+                }
+                printf("Success to write packet hdr in my_pcap.pcap\n");
+                res = fwrite(pkt_data.payload, pkt_data.payload_len, 1, pcap_file);
+                if (res != 1)
+                {
+                    goto IO_FAIL;
+                }
+                printf("[Get a packet] final 5 bytes of the packet %u %u %u %u %u", pkt_data.payload[pkt_data.payload_len - 5], pkt_data.payload[pkt_data.payload_len - 4], pkt_data.payload[pkt_data.payload_len - 3], pkt_data.payload[pkt_data.payload_len - 2], pkt_data.payload[pkt_data.payload_len - 1]);
+                memset(&pkt_data, 0, sizeof(struct packet_data));
+                packet_counter = packet_counter + 1;
+            }
+        }
     }
-    printf("Success to write packet hdr in my_pcap.pcap\n");
-    res = fwrite(pkt_data.payload, pkt_data.payload_len, 1, pcap_file);
-    if (res != 1)
-    {
-        goto IO_FAIL;
-    }
-
+    printf("There's %d packets\n", packet_counter);
 IO_FAIL:
     if (my_dev)
     {
