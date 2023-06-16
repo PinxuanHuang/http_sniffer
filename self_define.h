@@ -1,4 +1,5 @@
 #include <stddef.h>
+
 #ifndef _SELF_DEFINE_H_
 #define _SELF_DEFINE_H_
 

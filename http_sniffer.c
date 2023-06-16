@@ -41,7 +41,7 @@ static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
             pkt_data = flow->flow_info.packet_info;
             if (pkt_data)
             {
-                printk(KERN_INFO "[IOCTL] final 5 bytes of the packet %u %u %u %u %u", pkt_data->payload[pkt_data->payload_len - 5], pkt_data->payload[pkt_data->payload_len - 4], pkt_data->payload[pkt_data->payload_len - 3], pkt_data->payload[pkt_data->payload_len - 2], pkt_data->payload[pkt_data->payload_len - 1]);
+                // printk(KERN_INFO "[IOCTL] final 5 bytes of the packet %u %u %u %u %u", pkt_data->payload[pkt_data->payload_len - 5], pkt_data->payload[pkt_data->payload_len - 4], pkt_data->payload[pkt_data->payload_len - 3], pkt_data->payload[pkt_data->payload_len - 2], pkt_data->payload[pkt_data->payload_len - 1]);
                 break;
             }
             else
@@ -116,48 +116,65 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
     __u8 ipproto;
     struct flow_key key = {0};
     struct packet_data *pkt_data = NULL;
-
+    printk(KERN_INFO "There's a packet");
     pkt_tail = skb_tail_pointer(skb);
     eth_h = skb_mac_header(skb);
 
     if (pkt_tail - eth_h < 14)
     {
+        printk(KERN_INFO "Exit from 1");
         return NF_ACCEPT;
     }
 
     hproto = *(eth_h + 12);
     if (ntohs(hproto) != ETH_P_IP)
     {
+        printk(KERN_INFO "Exit from 2");
         return NF_ACCEPT;
     }
 
     ipv4_h = skb_network_header(skb);
     if (pkt_tail - ipv4_h <= 20)
     {
+        printk(KERN_INFO "Exit from 3");
         return NF_ACCEPT;
     }
 
     ipproto = *(ipv4_h + 9);
     if (ipproto != IPPROTO_TCP)
     {
+        printk(KERN_INFO "Exit from 3.5");
         return NF_ACCEPT;
     }
 
     tcp_h = skb_transport_header(skb);
     if (pkt_tail - tcp_h < 20)
     {
+        printk(KERN_INFO "Exit from 4");
         return NF_ACCEPT;
     }
-
     tcp_sp = ntohs(*(unsigned short *)tcp_h);
     tcp_dp = ntohs(*(unsigned short *)(tcp_h + 2));
+
+    printk(KERN_INFO "[sniff] flow : (sip:sport) %u.%u.%u.%u:%u | (dip:dport) %u.%u.%u.%u:%u\n",
+           ((unsigned char *)(ipv4_h + 12))[0],
+           ((unsigned char *)(ipv4_h + 12))[1],
+           ((unsigned char *)(ipv4_h + 12))[2],
+           ((unsigned char *)(ipv4_h + 12))[3],
+           tcp_sp,
+           ((unsigned char *)(ipv4_h + 16))[0],
+           ((unsigned char *)(ipv4_h + 17))[0],
+           ((unsigned char *)(ipv4_h + 18))[0],
+           ((unsigned char *)(ipv4_h + 19))[0],
+           tcp_dp);
+
     if (tcp_sp != HTTP_PORT && tcp_dp != HTTP_PORT)
     {
         return NF_ACCEPT;
     }
 
     // if the packet size greater than 54 bytes, except the packet header
-    printk(KERN_INFO "[*] It's http packet | eth to tail size [%ld]", (pkt_tail - eth_h));
+    // printk(KERN_INFO "[*] It's http packet | eth to tail size [%ld]", (pkt_tail - eth_h));
     if (pkt_tail - eth_h > 54)
     {
         /*
@@ -191,17 +208,17 @@ static unsigned int http_sniffer(void *priv, struct sk_buff *skb, const struct n
 
         /* set the packet data to the flow */
         flow_data_add_packet(table, key, pkt_data);
-        printk(KERN_INFO "[sniff] flow : (sip:sport) %u.%u.%u.%u:%u | (dip:dport) %u.%u.%u.%u:%u\n",
-               key.sip[0],
-               key.sip[1],
-               key.sip[2],
-               key.sip[3],
-               key.sport,
-               key.dip[0],
-               key.dip[1],
-               key.dip[2],
-               key.dip[3],
-               key.dport);
+        // printk(KERN_INFO "[sniff] flow : (sip:sport) %u.%u.%u.%u:%u | (dip:dport) %u.%u.%u.%u:%u\n",
+        //        key.sip[0],
+        //        key.sip[1],
+        //        key.sip[2],
+        //        key.sip[3],
+        //        key.sport,
+        //        key.dip[0],
+        //        key.dip[1],
+        //        key.dip[2],
+        //        key.dip[3],
+        //        key.dport);
     }
 
     // TODO design the flow management struct to record packets payload

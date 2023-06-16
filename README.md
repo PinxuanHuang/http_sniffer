@@ -1,6 +1,6 @@
 # http_sniffer
 
-It is used to sniff the http packets
+It is used to sniff the http packets and flow
 
 ## Structure
 
@@ -18,7 +18,7 @@ You need two virtual machine, one of them to be client and the other one to be t
 
 ```shell
 ./set_iptables # run this on router
-ethtool -K <dev> gro off # also run this on router for both network interface
+ethtool -K <dev> gro off # also run this on router for both network interface. It's already in the set_iptables file, so just replace the device name
 make kernel_module
 make user_space
 sudo insmod my_http_sniffer.ko
@@ -30,3 +30,8 @@ sudo rmmod my_http_sniffer
 # Hint
 
 - my kernel version is 5.15.0
+- It can work under multi core(cpu) now.
+
+# Environment
+
+client(apache bench) ---- server(kernel module) ---- server(apache server)

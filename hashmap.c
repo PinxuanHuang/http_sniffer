@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/spinlock.h>
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@
 #endif
 
 static int mem_counter = 0;
+spinlock_t bucket_lock; /* lock for accessing the bucket */
 
 void *my_malloc(size_t size)
 {
@@ -40,10 +42,13 @@ struct flow_table *flow_table_init(unsigned int size)
 {
     struct flow_table *flow_table = my_malloc(sizeof(struct flow_table));
     flow_table->size = size;
+    spin_lock_init(&bucket_lock);
     flow_table->buckets = my_malloc(sizeof(struct flow_entry *) * size);
     memset(flow_table->buckets, 0, sizeof(struct flow_entry *) * size);
     return flow_table;
 }
+
+/* following is helper function */
 
 /* get the specific bucket where the key should be resided */
 struct flow_entry *flow_table_get_bucket(struct flow_table *table, struct flow_key key)
@@ -67,6 +72,8 @@ struct flow_entry *flow_table_flow_exist(struct flow_entry *bucket, struct flow_
     }
     return NULL;
 }
+
+/* following is operation functions to the table */
 
 /* add a flow to flow table */
 int flow_table_add_flow(struct flow_table *table, struct flow_key key)
@@ -122,9 +129,12 @@ struct flow_data *flow_table_get_flow(struct flow_table *table, struct flow_key 
 /* delete the specific flow from the flow table */
 void flow_table_del_flow(struct flow_table *table, struct flow_key key)
 {
+    unsigned long flags;
     struct flow_entry *bucket;
     struct flow_entry *current_flow;
     struct packet_data *pkt_head;
+
+    spin_lock_irqsave(&bucket_lock, flags);
 
     /* get the specific bucket and check whether the flow exist or not */
     bucket = flow_table_get_bucket(table, key);
@@ -133,6 +143,7 @@ void flow_table_del_flow(struct flow_table *table, struct flow_key key)
     /* if the flow does not exist*/
     if (!current_flow)
     {
+        spin_unlock_irqrestore(&bucket_lock, flags);
         return;
     }
 
@@ -150,6 +161,7 @@ void flow_table_del_flow(struct flow_table *table, struct flow_key key)
     {
         table->buckets[(key.sport + key.dport) % (table->size)] = bucket->flow_next;
         my_free(current_flow);
+        spin_unlock_irqrestore(&bucket_lock, flags);
         return;
     }
 
@@ -163,16 +175,19 @@ void flow_table_del_flow(struct flow_table *table, struct flow_key key)
     }
     bucket->flow_next = current_flow->flow_next;
     my_free(current_flow);
+    spin_unlock_irqrestore(&bucket_lock, flags);
     return;
 }
 
 /* add a packet to the specific flow */
 int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct packet_data *pkt)
 {
+    unsigned long flags;
     struct flow_entry *bucket;
     struct flow_entry *current_flow;
     struct flow_data *current_flow_data;
     struct packet_data *pkt_data;
+    spin_lock_irqsave(&bucket_lock, flags);
 
     // printk(KERN_INFO "Start add a packet");
     /* get the specific bucket and check whether the flow exist or not */
@@ -187,6 +202,11 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
 
     /* get the specific flow data */
     current_flow_data = flow_table_get_flow(table, key);
+    if (!current_flow_data)
+    {
+        spin_unlock_irqrestore(&bucket_lock, flags);
+        return 0;
+    }
     pkt_data = current_flow_data->packet_info;
 
     /* if there's no any packet in the flow data*/
@@ -194,6 +214,7 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     {
         current_flow_data->packet_info = pkt;
         // printk(KERN_INFO "[Init] End add a packet");
+        spin_unlock_irqrestore(&bucket_lock, flags);
         return 0;
     }
 
@@ -208,17 +229,20 @@ int flow_data_add_packet(struct flow_table *table, struct flow_key key, struct p
     }
     pkt_data->pkt_next = pkt;
     // printk(KERN_INFO "[Append] End add a packet");
-    printk(KERN_INFO "[Add a packet] final 5 bytes of the packet %u %u %u %u %u", pkt->payload[pkt->payload_len - 5], pkt->payload[pkt->payload_len - 4], pkt->payload[pkt->payload_len - 3], pkt->payload[pkt->payload_len - 2], pkt->payload[pkt->payload_len - 1]);
+    // printk(KERN_INFO "[Add a packet] final 5 bytes of the packet %u %u %u %u %u", pkt->payload[pkt->payload_len - 5], pkt->payload[pkt->payload_len - 4], pkt->payload[pkt->payload_len - 3], pkt->payload[pkt->payload_len - 2], pkt->payload[pkt->payload_len - 1]);
+    spin_unlock_irqrestore(&bucket_lock, flags);
     return 0;
 }
 
 /* del all packets of a flow */
 void flow_data_del_packet(struct flow_table *table, struct flow_key key)
 {
+    unsigned long flags;
     struct flow_entry *bucket;
     struct flow_entry *current_flow;
     struct packet_data *pkt_head;
 
+    spin_lock_irqsave(&bucket_lock, flags);
     /* get the specific bucket and check whether the flow exist or not */
     bucket = flow_table_get_bucket(table, key);
     current_flow = flow_table_flow_exist(bucket, key);
@@ -226,6 +250,7 @@ void flow_data_del_packet(struct flow_table *table, struct flow_key key)
     /* if the flow does not exist*/
     if (!current_flow)
     {
+        spin_unlock_irqrestore(&bucket_lock, flags);
         return;
     }
 
@@ -236,6 +261,7 @@ void flow_data_del_packet(struct flow_table *table, struct flow_key key)
         current_flow->flow_info.packet_info = pkt_head->pkt_next;
         my_free(pkt_head);
     }
+    spin_unlock_irqrestore(&bucket_lock, flags);
     return;
 }
 
